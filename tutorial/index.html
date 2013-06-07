@@ -1,0 +1,237 @@
+<html>
+<head>
+<title>Akka Distributed Workers - Activator Template</title>
+</head>
+<body>
+	<div>
+		<h2>The Goal</h2>
+
+		<p>
+		Some applications need to distribute work to many machines because one single box
+		obviously has limited resources. This tutorial will explain how to implement
+		distributed workers with Akka cluster features.
+		</p>
+
+		<p>
+		The solution should support:
+		</p>
+		<ul>
+		<li>elastic addition/removal of front end nodes that receives work from clients</li>
+		<li>elastic addition/removal of worker actors and worker nodes</li>
+        <li>thousands of workers</li>
+		<li>jobs should not be lost, and if a worker fails, the job should be retried</li>
+		</ul>
+
+		<p>
+		The design is based on Derek Wyatt's blog post
+		<a href="http://letitcrash.com/post/29044669086/balancing-workload-across-nodes-with-akka-2"
+		target="_blank">Balancing Workload Across Nodes with Akka 2</a>. This article describes
+		the advantages of letting the workers pull work from the master instead of pushing work to
+		the workers.
+        </p>
+
+	</div>
+	<div>
+		<h2>Explore the Code - Master</h2>
+
+		<p>
+		The heart of the solution is the Master actor that manages outstanding work
+		and notifies registered workers when new work is available.
+		</p>
+
+		<p>
+		The Master actor is a singleton within the nodes with role "backend" in the cluster.
+		This means that there will be one active master actor in the cluster. It runs on the
+		oldest node.
+		</p>
+
+		<p>
+		You can see how the master singleton is started in the method <code>startBackend</code>
+		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
+		</p>
+
+		<p>
+		In case of failure of the master node another master actor is automatically started on
+		a standby node. The master on the standby node takes over the responsibility for
+		outstanding work. Work in progress can continue and will be reported to the new master.
+		The state of the master can be re-created on the standby node using event sourcing.
+		An alternative to event sourcing and the singleton master would be to keep track of all
+		jobs in a central database, but that is more complicated and not as scalable. In the end
+		of the tutorial we will describe how multiple masters can be supported with a small adjustment.
+		</p>
+
+		<p>
+		The master actor is made available for both front end and workers by registering itself
+		in the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/distributed-pub-sub.html"
+		target="_blank">DistributedPubSubMediator</a>.
+		</p>
+
+		<p>
+		Later we will explore the implementation of the <a href="#code/app/worker/Master.scala" class="shortcut">Master actor</a>
+		in depth, but first we will take a look at the worker and front end that interacts with the master.
+		</p>
+
+	</div>
+	<div>
+		<h2>Explore the Code - Worker</h2>
+
+		<p>
+		We should support many worker nodes and we assume that they can be unstable. Therefore we
+		don't let the worker nodes be members of the cluster, instead they communicate with the cluster
+		through the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
+		target="_blank">Cluster Client</a>. The worker doesn't have to know exactly where the master
+		is located.
+		</p>
+
+		<p>
+		You can see how a worker is started in the method <code>startWorker</code>
+		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
+		</p>
+
+		<p>
+		Open <a href="#code/app/worker/Worker.scala" class="shortcut">app/worker/Worker.scala</a>.
+		</p>
+
+		<p>
+		The worker register itself periodically to the master, see the <code>registerTask</code>.
+		This has the nice characteristics that master and worker can be started in any order, and
+		in case of master fail over the worker re-register itself to the new master.
+		</p>
+
+		<p>
+		When the worker receives work from the master it delegates the actual processing to
+		a child actor, <a href="#code/app/worker/WorkExecutor.scala" class="shortcut">WorkExecutor</a>,
+		to keep the worker responsive while executing the work.
+		</p>
+
+	</div>
+	<div>
+		<h2>Explore the Code - Front End</h2>
+
+		<p>
+		A typical front end provides a RESTful API that is used by the clients to submit (POST) jobs.
+		When the service has accepted the job it returns Created/201 response code to the client.
+		If it can't accept the job it returns a failure response code and the client has to retry or
+		discard the job.
+		</p>
+
+		<p>
+		In this example the front end is emulated, for simplicity, by an ordinary actor, see
+		<a href="#code/app/worker/Frontend.scala" class="shortcut">app/worker/Frontend.scala</a>
+		and client requests are simulated by the
+		<a href="#code/app/worker/WorkProducer.scala" class="shortcut">app/worker/WorkProducer.scala</a>.
+		As you can see the <code>Frontend</code> actor sends the work to the active master via the
+		<code>DistributedPubSubMediator</code>. It doesn't care about the exact location of the
+		master. Somewhere in the cluster there should be one master actor running.
+		The message is sent with <code>ask/?</code> to be able to reply to the client (<code>WorkProducer</code>)
+		when the job has been accepted or denied by the master.
+		</p>
+
+		<p>
+		You can see how a Fronteend and WorkProducer actor is started in the method <code>startFrontend</code>
+		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
+		</p>
+
+	</div>
+	<div>
+		<h2>Explore the Code - Master Revisited</h2>
+
+		<p>
+		Now when we know more about the Worker and Frontend that interacts with the Master it
+		is time to take a closer look at
+		<a href="#code/app/worker/Master.scala" class="shortcut">app/worker/Master.scala</a>.
+		</p>
+
+		<p>
+		Workers register itself to the master with <code>RegisterWorker</code>. Each worker
+		has an unique identifier and the master keeps track of the workers, including current
+		<code>ActorRef</code> (sender of <code>RegisterWorker</code> message) that can be used
+		for sending notifications to the worker. This <code>ActorRef</code> is not a direct
+		link to the worker actor, but messages sent to it will be delivered to the worker.
+		When using the cluster client messages are are tunneled via the receptionist on some
+		node in the cluster to avoid inbound connections from other cluster nodes to the client.
+		</p>
+
+		<p>
+		When the master receives <code>Work</code> from front end it adds the work item to
+		the queue of pending work and notifies idle workers with <code>WorkIsReady</code> message.
+		</p>
+
+		<p>
+		To be able to restore same state in case of fail over to a standby master actor the
+		changes (domain events) are stored in an append only transaction log and can be replayed
+		when standby actor is started. This event sourcing is not implemented in the example yet.
+		The <a href="https://github.com/eligosource/eventsourced" target="_blank">Eventsourced</a> library
+		can be used for that. When the domain event has been saved successfully the master replies
+		with an acknowledgement message (<code>Ack</code>) to the front end.
+		The master also keeps track of accepted work identifiers to be able to discard duplicates
+		sent from the front end.
+		</p>
+
+		<p>
+		When a worker receives <code>WorkIsReady</code> it sends back <code>WorkerRequestsWork</code>
+		to the master, which hands out the work, if any, to the worker. The master keeps track of that
+		the worker is busy and expect a result within a deadline. For long running jobs the worker
+		could send progress messages, but that is not implemented in the example.
+		</p>
+
+		<p>
+		When the worker sends <code>WorkIsDone</code> the master updates its state of the worker
+		and sends acknowledgement back to the worker. This message must also be idempotent as the worker will
+		re-send if it doesn't receive the acknowledgement.
+		</p>
+
+	</div>
+	<div>
+		<h2>Run the Application</h2>
+
+		<p>
+			Open the <a href="#run" class="shortcut">Run</a> tab and select <code>worker.Main</code> followed
+			by Restart. On the left-hand side we can see the console output, which is logging output
+			from nodes joining the cluster, the simulated work and results.
+		</p>
+
+		<p>
+
+	</div>
+	<div>
+		<h2>Many Masters</h2>
+
+		<p>
+		If the singleton master becomes a bottleneck we can start several master actors and
+		shard the jobs among them. For each shard of master/standby nodes we use a separate
+		cluster role name, e.g. "backend-shard1", "backend-shard2".
+		</p>
+
+		<p>
+		In <a href="#code/app/worker/MainManyMasters.scala" class="shortcut">app/worker/MainManyMasters.scala</a>
+		you can see startup of multiple masters in action. Everything else remains the same.
+		Note that <code>Frontend</code> sends work to the master with <code>DistributedPubSubMediator.Send</code>,
+		which means that one work item is sent to only one master.
+
+	</div>
+	<div>
+		<h2>Next Steps</h2>
+
+		<p>
+		In this example we have used
+		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-singleton.html#cluster-singleton"
+		target="_blank">Cluster Singleton</a>,
+		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
+		target="_blank">Cluster Client</a> and
+		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/distributed-pub-sub.html"
+		target="_blank">Distributed Publish Subscribe</a>.
+		</p>
+
+		<p>
+		More in depth documentation can be found in the
+		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/common/cluster.html"
+		target="_blank">Cluster Specification</a> and in the
+		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/scala/cluster-usage.html"
+		target="_blank">Cluster Usage</a> documentation.
+		</p>
+
+	</div>
+
+</body>
+</html>
