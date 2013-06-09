@@ -12,6 +12,8 @@
 		distributed workers with Akka cluster features.
 		</p>
 
+		<p><img src="tutorial/img1.png" border="0" /></p>
+
 		<p>
 		The solution should support:
 		</p>
@@ -50,6 +52,8 @@
 		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
 		</p>
 
+		<p><img src="tutorial/img2.png" border="0" /></p>
+
 		<p>
 		In case of failure of the master node another master actor is automatically started on
 		a standby node. The master on the standby node takes over the responsibility for
@@ -66,42 +70,13 @@
 		target="_blank">DistributedPubSubMediator</a>.
 		</p>
 
-		<p>
-		Later we will explore the implementation of the <a href="#code/app/worker/Master.scala" class="shortcut">Master actor</a>
-		in depth, but first we will take a look at the worker and front end that interacts with the master.
-		</p>
+		<p><img src="tutorial/img3.png" border="0" /></p>
 
-	</div>
-	<div>
-		<h2>Explore the Code - Worker</h2>
+		<p><img src="tutorial/img4.png" border="0" /></p>
 
 		<p>
-		We should support many worker nodes and we assume that they can be unstable. Therefore we
-		don't let the worker nodes be members of the cluster, instead they communicate with the cluster
-		through the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
-		target="_blank">Cluster Client</a>. The worker doesn't have to know exactly where the master
-		is located.
-		</p>
-
-		<p>
-		You can see how a worker is started in the method <code>startWorker</code>
-		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
-		</p>
-
-		<p>
-		Open <a href="#code/app/worker/Worker.scala" class="shortcut">app/worker/Worker.scala</a>.
-		</p>
-
-		<p>
-		The worker register itself periodically to the master, see the <code>registerTask</code>.
-		This has the nice characteristics that master and worker can be started in any order, and
-		in case of master fail over the worker re-register itself to the new master.
-		</p>
-
-		<p>
-		When the worker receives work from the master it delegates the actual processing to
-		a child actor, <a href="#code/app/worker/WorkExecutor.scala" class="shortcut">WorkExecutor</a>,
-		to keep the worker responsive while executing the work.
+		Later we will explore the implementation of the <a href="#code/app/worker/Master.scala" class="shortcut">Master</a>
+		actor in depth, but first we will take a look at the front end and worker that interacts with the master.
 		</p>
 
 	</div>
@@ -127,10 +102,58 @@
 		when the job has been accepted or denied by the master.
 		</p>
 
+		<p><img src="tutorial/img5.png" border="0" /></p>
+
 		<p>
 		You can see how a Fronteend and WorkProducer actor is started in the method <code>startFrontend</code>
 		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
 		</p>
+
+	</div>
+
+	<div>
+		<h2>Explore the Code - Worker</h2>
+
+		<p>
+		We should support many worker nodes and we assume that they can be unstable. Therefore we
+		don't let the worker nodes be members of the cluster, instead they communicate with the cluster
+		through the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
+		target="_blank">Cluster Client</a>. The worker doesn't have to know exactly where the master
+		is located.
+		</p>
+
+		<p><img src="tutorial/img6.png" border="0" /></p>
+
+		<p>
+		You can see how a worker is started in the method <code>startWorker</code>
+		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
+		</p>
+
+		<p>
+		Open <a href="#code/app/worker/Worker.scala" class="shortcut">app/worker/Worker.scala</a>.
+		</p>
+
+		<p>
+		The worker register itself periodically to the master, see the <code>registerTask</code>.
+		This has the nice characteristics that master and worker can be started in any order, and
+		in case of master fail over the worker re-register itself to the new master.
+		</p>
+
+		<p><img src="tutorial/img7.png" border="0" /></p>
+
+		<p>
+		The Frontend actor sends the work to the master actor.
+		</p>
+
+		<p><img src="tutorial/img8.png" border="0" /></p>
+
+		<p>
+		When the worker receives work from the master it delegates the actual processing to
+		a child actor, <a href="#code/app/worker/WorkExecutor.scala" class="shortcut">WorkExecutor</a>,
+		to keep the worker responsive while executing the work.
+		</p>
+
+		<p><img src="tutorial/img9.png" border="0" /></p>
 
 	</div>
 	<div>
@@ -168,6 +191,8 @@
 		sent from the front end.
 		</p>
 
+		<p><img src="tutorial/img8.png" border="0" /></p>
+
 		<p>
 		When a worker receives <code>WorkIsReady</code> it sends back <code>WorkerRequestsWork</code>
 		to the master, which hands out the work, if any, to the worker. The master keeps track of that
@@ -175,13 +200,43 @@
 		could send progress messages, but that is not implemented in the example.
 		</p>
 
+		<p><img src="tutorial/img9.png" border="0" /></p>
+
 		<p>
 		When the worker sends <code>WorkIsDone</code> the master updates its state of the worker
 		and sends acknowledgement back to the worker. This message must also be idempotent as the worker will
 		re-send if it doesn't receive the acknowledgement.
 		</p>
 
+		<p><img src="tutorial/img10.png" border="0" /></p>
+
 	</div>
+	</div>
+	<div>
+		<h2>Summary</h2>
+
+		<p>
+		The <a href="#code/app/worker/Master.scala" class="shortcut">Master</a> actor
+		is a <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-singleton.html#cluster-singleton"
+		target="_blank">Cluster Singleton</a> and register itself in 
+		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/distributed-pub-sub.html"
+		target="_blank">DistributedPubSubMediator</a>.
+		<p>
+
+		<p>
+		The <a href="#code/app/worker/Frontend.scala" class="shortcut">Frontend</a> actor send work
+		to the master via the mediator.
+		</p>
+
+		<p>
+		The <a href="#code/app/worker/Worker.scala" class="shortcut">Worker</a> communicate with the
+		cluster and its master with the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
+		target="_blank">Cluster Client</a>.
+		</p>
+
+		<p><img src="tutorial/img11.png" border="0" /></p>
+
+	</div>	
 	<div>
 		<h2>Run the Application</h2>
 
