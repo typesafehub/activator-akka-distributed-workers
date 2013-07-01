@@ -18,6 +18,9 @@ import akka.actor.ActorRef
 import akka.actor.Actor
 import akka.testkit.ImplicitSender
 import akka.testkit.TestProbe
+import org.apache.commons.io.FileUtils
+import com.typesafe.config.ConfigFactory
+import java.io.File
 
 object DistributedWorkerSpec {
   class FlakyWorkExecutor extends Actor {
@@ -51,10 +54,19 @@ class DistributedWorkerSpec(_system: ActorSystem)
   import DistributedWorkerSpec._
 
   val workTimeout = 3.seconds
+  val journalDir = new File(system.settings.config.getString("journal-dir"))
 
-  def this() = this(ActorSystem("DistributedWorkerSpec"))
+  def this() = this(ActorSystem("DistributedWorkerSpec",
+    ConfigFactory.parseString("journal-dir=target/test-journal").withFallback(ConfigFactory.load())))
 
-  override def afterAll: Unit = system.shutdown()
+  override def beforeAll: Unit =
+    FileUtils.deleteDirectory(journalDir)
+
+  override def afterAll: Unit = {
+    system.shutdown()
+    system.awaitTermination(10.seconds)
+    FileUtils.deleteDirectory(journalDir)
+  }
 
   "Distributed workers" should "perform work and publish results" in {
     val clusterAddress = Cluster(system).selfAddress
@@ -83,7 +95,9 @@ class DistributedWorkerSpec(_system: ActorSystem)
       }
     }
 
-    results.expectMsgType[WorkResult].workId should be("1")
+    within(10.seconds) {
+      results.expectMsgType[WorkResult].workId should be("1")
+    }
 
     for (n ← 2 to 100) {
       frontend ! Work(n.toString, n)
