@@ -49,7 +49,7 @@
 
 		<p>
 		You can see how the master singleton is started in the method <code>startBackend</code>
-		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
+		in <a href="#code/src/main/scala/worker/Main.scala" class="shortcut">Main.scala</a>
 		</p>
 
 		<p><img src="tutorial/img2.png" border="0" /></p>
@@ -66,7 +66,7 @@
 
 		<p>
 		The master actor is made available for both front end and workers by registering itself
-		in the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/distributed-pub-sub.html"
+		in the <a href="http://doc.akka.io/docs/akka/2.2.0/contrib/distributed-pub-sub.html"
 		target="_blank">DistributedPubSubMediator</a>.
 		</p>
 
@@ -75,7 +75,7 @@
 		<p><img src="tutorial/img4.png" border="0" /></p>
 
 		<p>
-		Later we will explore the implementation of the <a href="#code/app/worker/Master.scala" class="shortcut">Master</a>
+		Later we will explore the implementation of the <a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a>
 		actor in depth, but first we will take a look at the front end and worker that interacts with the master.
 		</p>
 
@@ -92,9 +92,9 @@
 
 		<p>
 		In this example the front end is emulated, for simplicity, by an ordinary actor, see
-		<a href="#code/app/worker/Frontend.scala" class="shortcut">app/worker/Frontend.scala</a>
+		<a href="#code/src/main/scala/worker/Frontend.scala" class="shortcut">Frontend.scala</a>
 		and client requests are simulated by the
-		<a href="#code/app/worker/WorkProducer.scala" class="shortcut">app/worker/WorkProducer.scala</a>.
+		<a href="#code/src/main/scala/worker/WorkProducer.scala" class="shortcut">WorkProducer.scala</a>.
 		As you can see the <code>Frontend</code> actor sends the work to the active master via the
 		<code>DistributedPubSubMediator</code>. It doesn't care about the exact location of the
 		master. Somewhere in the cluster there should be one master actor running.
@@ -106,7 +106,7 @@
 
 		<p>
 		You can see how a Fronteend and WorkProducer actor is started in the method <code>startFrontend</code>
-		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
+		in <a href="#code/src/main/scala/worker/Main.scala" class="shortcut">Main.scala</a>
 		</p>
 
 	</div>
@@ -117,7 +117,7 @@
 		<p>
 		We should support many worker nodes and we assume that they can be unstable. Therefore we
 		don't let the worker nodes be members of the cluster, instead they communicate with the cluster
-		through the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
+		through the <a href="http://doc.akka.io/docs/akka/2.2.0/contrib/cluster-client.html"
 		target="_blank">Cluster Client</a>. The worker doesn't have to know exactly where the master
 		is located.
 		</p>
@@ -126,11 +126,11 @@
 
 		<p>
 		You can see how a worker is started in the method <code>startWorker</code>
-		in <a href="#code/app/worker/Main.scala" class="shortcut">app/worker/Main.scala</a>
+		in <a href="#code/src/main/scala/worker/Main.scala" class="shortcut">Main.scala</a>
 		</p>
 
 		<p>
-		Open <a href="#code/app/worker/Worker.scala" class="shortcut">app/worker/Worker.scala</a>.
+		Open <a href="#code/src/main/scala/worker/Worker.scala" class="shortcut">Worker.scala</a>.
 		</p>
 
 		<p>
@@ -149,7 +149,7 @@
 
 		<p>
 		When the worker receives work from the master it delegates the actual processing to
-		a child actor, <a href="#code/app/worker/WorkExecutor.scala" class="shortcut">WorkExecutor</a>,
+		a child actor, <a href="#code/src/main/scala/worker/WorkExecutor.scala" class="shortcut">WorkExecutor</a>,
 		to keep the worker responsive while executing the work.
 		</p>
 
@@ -162,7 +162,7 @@
 		<p>
 		Now when we know more about the Worker and Frontend that interacts with the Master it
 		is time to take a closer look at
-		<a href="#code/app/worker/Master.scala" class="shortcut">app/worker/Master.scala</a>.
+		<a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master.scala</a>.
 		</p>
 
 		<p>
@@ -216,21 +216,21 @@
 		<h2>Summary</h2>
 
 		<p>
-		The <a href="#code/app/worker/Master.scala" class="shortcut">Master</a> actor
-		is a <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-singleton.html#cluster-singleton"
+		The <a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a> actor
+		is a <a href="http://doc.akka.io/docs/akka/2.2.0/contrib/cluster-singleton.html#cluster-singleton"
 		target="_blank">Cluster Singleton</a> and register itself in 
-		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/distributed-pub-sub.html"
+		<a href="http://doc.akka.io/docs/akka/2.2.0/contrib/distributed-pub-sub.html"
 		target="_blank">DistributedPubSubMediator</a>.
 		<p>
 
 		<p>
-		The <a href="#code/app/worker/Frontend.scala" class="shortcut">Frontend</a> actor send work
+		The <a href="#code/src/main/scala/worker/Frontend.scala" class="shortcut">Frontend</a> actor send work
 		to the master via the mediator.
 		</p>
 
 		<p>
-		The <a href="#code/app/worker/Worker.scala" class="shortcut">Worker</a> communicate with the
-		cluster and its master with the <a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
+		The <a href="#code/src/main/scala/worker/Worker.scala" class="shortcut">Worker</a> communicate with the
+		cluster and its master with the <a href="http://doc.akka.io/docs/akka/2.2.0/contrib/cluster-client.html"
 		target="_blank">Cluster Client</a>.
 		</p>
 
@@ -259,7 +259,7 @@
 		</p>
 
 		<p>
-		In <a href="#code/app/worker/MainManyMasters.scala" class="shortcut">app/worker/MainManyMasters.scala</a>
+		In <a href="#code/src/main/scala/worker/MainManyMasters.scala" class="shortcut">MainManyMasters.scala</a>
 		you can see startup of multiple masters in action. Everything else remains the same.
 		Note that <code>Frontend</code> sends work to the master with <code>DistributedPubSubMediator.Send</code>,
 		which means that one work item is sent to only one master.
@@ -270,19 +270,19 @@
 
 		<p>
 		In this example we have used
-		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-singleton.html#cluster-singleton"
+		<a href="http://doc.akka.io/docs/akka/2.2.0/contrib/cluster-singleton.html#cluster-singleton"
 		target="_blank">Cluster Singleton</a>,
-		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/cluster-client.html"
+		<a href="http://doc.akka.io/docs/akka/2.2.0/contrib/cluster-client.html"
 		target="_blank">Cluster Client</a> and
-		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/contrib/distributed-pub-sub.html"
+		<a href="http://doc.akka.io/docs/akka/2.2.0/contrib/distributed-pub-sub.html"
 		target="_blank">Distributed Publish Subscribe</a>.
 		</p>
 
 		<p>
 		More in depth documentation can be found in the
-		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/common/cluster.html"
+		<a href="http://doc.akka.io/docs/akka/2.2.0/common/cluster.html"
 		target="_blank">Cluster Specification</a> and in the
-		<a href="http://doc.akka.io/docs/akka/2.2.0-RC1/scala/cluster-usage.html"
+		<a href="http://doc.akka.io/docs/akka/2.2.0/scala/cluster-usage.html"
 		target="_blank">Cluster Usage</a> documentation.
 		</p>
 
