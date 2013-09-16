@@ -54,10 +54,11 @@ class DistributedWorkerSpec(_system: ActorSystem)
   import DistributedWorkerSpec._
 
   val workTimeout = 3.seconds
-  val journalDir = new File(system.settings.config.getString("journal-dir"))
+  val journalDir = new File(system.settings.config.getString("akka.persistence.journal.leveldb.dir"))
 
   def this() = this(ActorSystem("DistributedWorkerSpec",
-    ConfigFactory.parseString("journal-dir=target/test-journal").withFallback(ConfigFactory.load())))
+    ConfigFactory.parseString("akka.persistence.journal.leveldb.dir=target/test-journal").
+      withFallback(ConfigFactory.load())))
 
   override def beforeAll: Unit =
     FileUtils.deleteDirectory(journalDir)

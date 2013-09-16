@@ -1,25 +1,20 @@
 package worker
 
-import java.io.File
 import scala.concurrent.duration._
 import scala.concurrent.duration.Deadline
 import scala.concurrent.duration.FiniteDuration
-import org.eligosource.eventsourced.core.Eventsourced
-import org.eligosource.eventsourced.core.EventsourcingExtension
-import org.eligosource.eventsourced.core.Message
-import org.eligosource.eventsourced.core.ReplayParams
-import org.eligosource.eventsourced.journal.leveldb.LeveldbJournalProps
 import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorRef
 import akka.actor.OneForOneStrategy
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
+import akka.cluster.Cluster
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator
 import akka.contrib.pattern.DistributedPubSubMediator.Put
-import akka.pattern.pipe
-import akka.util.Timeout
+import akka.persistence.Persistent
+import akka.persistence.Processor
 
 object Master {
 
@@ -38,32 +33,16 @@ object Master {
 
 }
 
-class Master(workTimeout: FiniteDuration) extends Actor with ActorLogging {
+class Master(workTimeout: FiniteDuration) extends Actor with Processor with ActorLogging {
   import Master._
   import WorkState._
-  import EventSource._
 
   val mediator = DistributedPubSubExtension(context.system).mediator
 
-  // TODO processorId must include cluster role to support multiple masters
-  def processorId: Int = 1
-
-  val eventSource: ActorRef = {
-    val journalDir = new File(context.system.settings.config.getString("journal-dir"))
-    val journal = LeveldbJournalProps(journalDir, native = false).createJournal
-    val ext = EventsourcingExtension(context.system, journal)
-    val ref = ext.processorOf(
-      Props(new EventSource with Eventsourced { val id = processorId }), name = Some("eventsource"))
-    val replayParams = ReplayParams(
-      processorId = processorId)
-    implicit val timeout = Timeout(1.minute)
-    import context.dispatcher
-    val c = for {
-      _ ← ext.replay(Seq(replayParams))
-      _ ← ext.deliver()
-    } yield RecoveryCompleted
-    c recover { case e ⇒ RecoveryFailed(e) } pipeTo ref
-    ref
+  // processorId must include cluster role to support multiple masters
+  override def processorId: String = Cluster(context.system).selfRoles.find(_.startsWith("backend-")) match {
+    case Some(role) ⇒ role + "-master"
+    case None       ⇒ "master"
   }
 
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 3, withinTimeRange = 1.minute) {
@@ -84,16 +63,15 @@ class Master(workTimeout: FiniteDuration) extends Actor with ActorLogging {
 
   override def postStop(): Unit = cleanupTask.cancel()
 
-  def receive = replaying
+  def receive = {
+    case Persistent(event: WorkDomainEvent, sequenceNr) if recoveryRunning ⇒
+      // only update current state by applying the event, no side effects
+      workState = workState.updated(event)
+      log.info("Replayed {} {}", sequenceNr, event.getClass.getSimpleName)
+    case Persistent(event: WorkDomainEvent, sequenceNr) ⇒
+      log.info("Stored {} {}", sequenceNr, event.getClass.getSimpleName)
+      handleDomainEvent(event)
 
-  def replaying: Actor.Receive = {
-    case event: WorkDomainEvent ⇒ workState = workState.updated(event)
-    case RecoveryCompleted ⇒
-      log.info("Recovery completed")
-      context.become(active)
-  }
-
-  def active: Actor.Receive = {
     case MasterWorkerProtocol.RegisterWorker(workerId) ⇒
       if (workers.contains(workerId)) {
         workers += (workerId -> workers(workerId).copy(ref = sender))
@@ -110,7 +88,7 @@ class Master(workTimeout: FiniteDuration) extends Actor with ActorLogging {
           case Some(s @ WorkerState(_, Idle)) ⇒
             val work = workState.nextWork
             val event = WorkStarted(work.workId)
-            eventSource.forward(Message(event))
+            self forward Persistent(event)
             workState = workState.updated(event)
             log.info("Giving worker {} some work {}", workerId, work.workId)
             workers += (workerId -> s.copy(status = Busy(work.workId, Deadline.now + workTimeout)))
@@ -118,9 +96,6 @@ class Master(workTimeout: FiniteDuration) extends Actor with ActorLogging {
           case _ ⇒
         }
       }
-
-    case event @ WorkStarted(workId) ⇒
-      ; // already applied
 
     case MasterWorkerProtocol.WorkIsDone(workerId, workId, result) ⇒
       // idempotent
@@ -132,27 +107,15 @@ class Master(workTimeout: FiniteDuration) extends Actor with ActorLogging {
       } else {
         log.info("Work {} is done by worker {}", workId, workerId)
         changeWorkerToIdle(workerId, workId)
-        eventSource.forward(Message(WorkCompleted(workId, result)))
+        self forward Persistent(WorkCompleted(workId, result))
       }
-
-    case event @ WorkCompleted(workId, result) ⇒
-      // domain event was stored
-      workState = workState.updated(event)
-      mediator ! DistributedPubSubMediator.Publish(ResultsTopic, WorkResult(workId, result))
-      // Ack back to original sender
-      sender ! MasterWorkerProtocol.Ack(workId)
 
     case MasterWorkerProtocol.WorkFailed(workerId, workId) ⇒
       if (workState.isInProgress(workId)) {
         log.info("Work {} failed by worker {}", workId, workerId)
         changeWorkerToIdle(workerId, workId)
-        eventSource.forward(Message(WorkerFailed(workId)))
+        self forward Persistent(WorkerFailed(workId))
       }
-
-    case event @ WorkerFailed(workId) ⇒
-      // domain event was stored
-      workState = workState.updated(event)
-      notifyWorkers()
 
     case work: Work ⇒
       // idempotent
@@ -160,29 +123,42 @@ class Master(workTimeout: FiniteDuration) extends Actor with ActorLogging {
         sender ! Master.Ack(work.workId)
       } else {
         log.info("Accepted work: {}", work.workId)
-        eventSource.forward(Message(WorkAccepted(work)))
+        self forward Persistent(WorkAccepted(work))
       }
-
-    case event @ WorkAccepted(work) ⇒
-      // domain event was stored
-      // Ack back to original sender
-      sender ! Master.Ack(work.workId)
-      workState = workState.updated(event)
-      notifyWorkers()
 
     case CleanupTick ⇒
       for ((workerId, s @ WorkerState(_, Busy(workId, timeout))) ← workers) {
         if (timeout.isOverdue) {
           log.info("Work timed out: {}", workId)
           workers -= workerId
-          eventSource.forward(Message(WorkerTimedOut(workId)))
+          self forward Persistent(WorkerTimedOut(workId))
         }
       }
 
+  }
+
+  def handleDomainEvent(event: WorkDomainEvent): Unit = event match {
+    case event @ WorkStarted(workId) ⇒
+      ; // already applied
+    case event @ WorkCompleted(workId, result) ⇒
+      // domain event was stored
+      workState = workState.updated(event)
+      mediator ! DistributedPubSubMediator.Publish(ResultsTopic, WorkResult(workId, result))
+      // Ack back to original sender
+      sender ! MasterWorkerProtocol.Ack(workId)
+    case event @ WorkerFailed(workId) ⇒
+      // domain event was stored
+      workState = workState.updated(event)
+      notifyWorkers()
+    case event @ WorkAccepted(work) ⇒
+      // domain event was stored
+      // Ack back to original sender
+      sender ! Master.Ack(work.workId)
+      workState = workState.updated(event)
+      notifyWorkers()
     case event @ WorkerTimedOut(workId) ⇒
       workState = workState.updated(event)
       notifyWorkers()
-
   }
 
   def notifyWorkers(): Unit =
@@ -204,26 +180,5 @@ class Master(workTimeout: FiniteDuration) extends Actor with ActorLogging {
 
   // TODO cleanup old workers
   // TODO cleanup old workIds, doneWorkIds
-
-}
-
-object EventSource {
-  case object RecoveryCompleted
-  case class RecoveryFailed(e: Throwable)
-}
-
-// TODO this actor will not be needed, the Master will be a Processer itself, and send Message to self
-class EventSource extends Actor with ActorLogging {
-  import EventSource._
-
-  def receive = {
-    case msg: Message ⇒
-      log.info("Stored/replayed {} {}", msg.sequenceNr, msg.event.getClass.getSimpleName)
-      context.parent.forward(msg.event)
-    case RecoveryCompleted ⇒
-      log.info("Recovery completed")
-      context.parent.forward(RecoveryCompleted)
-    case RecoveryFailed(e) ⇒ throw e
-  }
 
 }
