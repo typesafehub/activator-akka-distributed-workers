@@ -27,7 +27,7 @@ class WorkProducer(frontend: ActorRef) extends Actor with ActorLogging {
   override def postRestart(reason: Throwable): Unit = ()
 
   def receive = {
-    case Tick ⇒
+    case Tick =>
       n += 1
       log.info("Produced work: {}", n)
       val work = Work(nextWorkId(), n)
@@ -37,10 +37,10 @@ class WorkProducer(frontend: ActorRef) extends Actor with ActorLogging {
   }
 
   def waitAccepted(work: Work): Actor.Receive = {
-    case Frontend.Ok ⇒
+    case Frontend.Ok =>
       context.unbecome()
       scheduler.scheduleOnce(rnd.nextInt(3, 10).seconds, self, Tick)
-    case Frontend.NotOk ⇒
+    case Frontend.NotOk =>
       log.info("Work not accepted, retry after a while")
       scheduler.scheduleOnce(3.seconds, frontend, work)
   }
