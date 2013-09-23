@@ -68,9 +68,6 @@ class Master(workTimeout: FiniteDuration) extends Actor with Processor with Acto
       // only update current state by applying the event, no side effects
       workState = workState.updated(event)
       log.info("Replayed {} {}", sequenceNr, event.getClass.getSimpleName)
-    case Persistent(event: WorkDomainEvent, sequenceNr) ⇒
-      log.info("Stored {} {}", sequenceNr, event.getClass.getSimpleName)
-      handleDomainEvent(event)
 
     case MasterWorkerProtocol.RegisterWorker(workerId) ⇒
       if (workers.contains(workerId)) {
@@ -87,12 +84,12 @@ class Master(workTimeout: FiniteDuration) extends Actor with Processor with Acto
         workers.get(workerId) match {
           case Some(s @ WorkerState(_, Idle)) ⇒
             val work = workState.nextWork
-            val event = WorkStarted(work.workId)
-            self forward Persistent(event)
-            workState = workState.updated(event)
-            log.info("Giving worker {} some work {}", workerId, work.workId)
-            workers += (workerId -> s.copy(status = Busy(work.workId, Deadline.now + workTimeout)))
-            sender ! work
+            handleDomainEvent(WorkStarted(work.workId)) { event ⇒
+              workState = workState.updated(event)
+              log.info("Giving worker {} some work {}", workerId, work.workId)
+              workers += (workerId -> s.copy(status = Busy(work.workId, Deadline.now + workTimeout)))
+              sender ! work
+            }
           case _ ⇒
         }
       }
@@ -107,14 +104,22 @@ class Master(workTimeout: FiniteDuration) extends Actor with Processor with Acto
       } else {
         log.info("Work {} is done by worker {}", workId, workerId)
         changeWorkerToIdle(workerId, workId)
-        self forward Persistent(WorkCompleted(workId, result))
+        handleDomainEvent(WorkCompleted(workId, result)) { event ⇒
+          workState = workState.updated(event)
+          mediator ! DistributedPubSubMediator.Publish(ResultsTopic, WorkResult(workId, result))
+          // Ack back to original sender
+          sender ! MasterWorkerProtocol.Ack(workId)
+        }
       }
 
     case MasterWorkerProtocol.WorkFailed(workerId, workId) ⇒
       if (workState.isInProgress(workId)) {
         log.info("Work {} failed by worker {}", workId, workerId)
         changeWorkerToIdle(workerId, workId)
-        self forward Persistent(WorkerFailed(workId))
+        handleDomainEvent(WorkerFailed(workId)) { event ⇒
+          workState = workState.updated(event)
+          notifyWorkers()
+        }
       }
 
     case work: Work ⇒
@@ -123,7 +128,12 @@ class Master(workTimeout: FiniteDuration) extends Actor with Processor with Acto
         sender ! Master.Ack(work.workId)
       } else {
         log.info("Accepted work: {}", work.workId)
-        self forward Persistent(WorkAccepted(work))
+        handleDomainEvent(WorkAccepted(work)) { event ⇒
+          // Ack back to original sender
+          sender ! Master.Ack(work.workId)
+          workState = workState.updated(event)
+          notifyWorkers()
+        }
       }
 
     case CleanupTick ⇒
@@ -131,34 +141,34 @@ class Master(workTimeout: FiniteDuration) extends Actor with Processor with Acto
         if (timeout.isOverdue) {
           log.info("Work timed out: {}", workId)
           workers -= workerId
-          self forward Persistent(WorkerTimedOut(workId))
+          handleDomainEvent(WorkerTimedOut(workId)) { event ⇒
+            workState = workState.updated(event)
+            notifyWorkers()
+          }
         }
       }
 
   }
 
-  def handleDomainEvent(event: WorkDomainEvent): Unit = event match {
-    case event @ WorkStarted(workId) ⇒
-      ; // already applied
-    case event @ WorkCompleted(workId, result) ⇒
-      // domain event was stored
-      workState = workState.updated(event)
-      mediator ! DistributedPubSubMediator.Publish(ResultsTopic, WorkResult(workId, result))
-      // Ack back to original sender
-      sender ! MasterWorkerProtocol.Ack(workId)
-    case event @ WorkerFailed(workId) ⇒
-      // domain event was stored
-      workState = workState.updated(event)
-      notifyWorkers()
-    case event @ WorkAccepted(work) ⇒
-      // domain event was stored
-      // Ack back to original sender
-      sender ! Master.Ack(work.workId)
-      workState = workState.updated(event)
-      notifyWorkers()
-    case event @ WorkerTimedOut(workId) ⇒
-      workState = workState.updated(event)
-      notifyWorkers()
+  /**
+   * Handle the domain `event` by persisting it and thereafter proceed with the
+   * `whenStored` thunk with the `event` passed as parameter.
+   * Any messages received while the event is stored are stashed and processed
+   * afterwards.
+   */
+  def handleDomainEvent[A](event: A)(whenStored: A ⇒ Unit): Unit = {
+    val storingBehavior: Receive = {
+      case Persistent(`event`, sequenceNr) ⇒
+        log.info("Stored {} {}", sequenceNr, event.getClass.getSimpleName)
+        // important to unbecome before whenStored to support become in the whenStored thunk
+        context.unbecome()
+        unstashAll()
+        whenStored(event)
+      case _ ⇒ stash()
+    }
+    // TODO will exception be thrown by Processor if storage fails (timeout)?
+    context.become(storingBehavior, discardOld = false)
+    self forward Persistent(event)
   }
 
   def notifyWorkers(): Unit =
