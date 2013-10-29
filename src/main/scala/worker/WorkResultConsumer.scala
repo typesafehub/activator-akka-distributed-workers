@@ -12,8 +12,8 @@ class WorkResultConsumer extends Actor with ActorLogging {
   mediator ! DistributedPubSubMediator.Subscribe(Master.ResultsTopic, self)
 
   def receive = {
-    case _: DistributedPubSubMediator.SubscribeAck ⇒
-    case WorkResult(workId, result) ⇒
+    case _: DistributedPubSubMediator.SubscribeAck =>
+    case WorkResult(workId, result) =>
       log.info("Consumed result: {}", result)
   }
 

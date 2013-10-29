@@ -38,15 +38,15 @@ class Worker(clusterClient: ActorRef, workExecutorProps: Props, registerInterval
 
   var currentWorkId: Option[String] = None
   def workId: String = currentWorkId match {
-    case Some(workId) ⇒ workId
-    case None         ⇒ throw new IllegalStateException("Not working")
+    case Some(workId) => workId
+    case None         => throw new IllegalStateException("Not working")
   }
 
   override def supervisorStrategy = OneForOneStrategy() {
-    case _: ActorInitializationException ⇒ Stop
-    case _: DeathPactException           ⇒ Stop
-    case _: Exception ⇒
-      currentWorkId foreach { workId ⇒ sendToMaster(WorkFailed(workerId, workId)) }
+    case _: ActorInitializationException => Stop
+    case _: DeathPactException           => Stop
+    case _: Exception =>
+      currentWorkId foreach { workId => sendToMaster(WorkFailed(workerId, workId)) }
       context.become(idle)
       Restart
   }
@@ -56,10 +56,10 @@ class Worker(clusterClient: ActorRef, workExecutorProps: Props, registerInterval
   def receive = idle
 
   def idle: Receive = {
-    case WorkIsReady ⇒
+    case WorkIsReady =>
       sendToMaster(WorkerRequestsWork(workerId))
 
-    case Work(workId, job) ⇒
+    case Work(workId, job) =>
       log.debug("Got work: {}", job)
       currentWorkId = Some(workId)
       workExecutor ! job
@@ -67,30 +67,30 @@ class Worker(clusterClient: ActorRef, workExecutorProps: Props, registerInterval
   }
 
   def working: Receive = {
-    case WorkComplete(result) ⇒
+    case WorkComplete(result) =>
       log.debug("Work is complete. Result {}.", result)
       sendToMaster(WorkIsDone(workerId, workId, result))
       context.setReceiveTimeout(5.seconds)
       context.become(waitForWorkIsDoneAck(result))
 
-    case _: Work ⇒
+    case _: Work =>
       log.info("Yikes. Master told me to do work, while I'm working.")
   }
 
   def waitForWorkIsDoneAck(result: Any): Receive = {
-    case Ack(id) if id == workId ⇒
+    case Ack(id) if id == workId =>
       sendToMaster(WorkerRequestsWork(workerId))
       context.setReceiveTimeout(Duration.Undefined)
       context.become(idle)
-    case ReceiveTimeout ⇒
+    case ReceiveTimeout =>
       log.info("No ack from master, retrying")
       sendToMaster(WorkIsDone(workerId, workId, result))
   }
 
   override def unhandled(message: Any): Unit = message match {
-    case Terminated(`workExecutor`) ⇒ context.stop(self)
-    case WorkIsReady                ⇒
-    case _                          ⇒ super.unhandled(message)
+    case Terminated(`workExecutor`) => context.stop(self)
+    case WorkIsReady                =>
+    case _                          => super.unhandled(message)
   }
 
   def sendToMaster(msg: Any): Unit = {

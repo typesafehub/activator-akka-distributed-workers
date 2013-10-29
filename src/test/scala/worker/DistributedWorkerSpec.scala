@@ -29,7 +29,7 @@ object DistributedWorkerSpec {
     }
 
     def receive = {
-      case n: Int ⇒
+      case n: Int =>
         i += 1
         if (i == 3) throw new RuntimeException("Flaky worker")
         if (i == 5) context.stop(self)
@@ -59,13 +59,13 @@ class DistributedWorkerSpec(_system: ActorSystem)
   "Distributed workers" should "perform work and publish results" in {
     val clusterAddress = Cluster(system).selfAddress
     Cluster(system).join(clusterAddress)
-    system.actorOf(ClusterSingletonManager.props(_ ⇒ Master.props(workTimeout), "active",
+    system.actorOf(ClusterSingletonManager.props(_ => Master.props(workTimeout), "active",
       PoisonPill, None), "master")
 
     val initialContacts = Set(
       system.actorSelection(RootActorPath(clusterAddress) / "user" / "receptionist"))
     val clusterClient = system.actorOf(ClusterClient.props(initialContacts), "clusterClient")
-    for (n ← 1 to 3)
+    for (n <- 1 to 3)
       system.actorOf(Worker.props(clusterClient, Props[WorkExecutor], 1.second), "worker-" + n)
     val flakyWorker = system.actorOf(Worker.props(clusterClient, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
 
@@ -85,13 +85,13 @@ class DistributedWorkerSpec(_system: ActorSystem)
 
     results.expectMsgType[WorkResult].workId should be("1")
 
-    for (n ← 2 to 100) {
+    for (n <- 2 to 100) {
       frontend ! Work(n.toString, n)
       expectMsg(Frontend.Ok)
     }
 
     results.within(10.seconds) {
-      val ids = results.receiveN(99).map { case WorkResult(workId, _) ⇒ workId }
+      val ids = results.receiveN(99).map { case WorkResult(workId, _) => workId }
       // nothing lost, and no duplicates
       ids.toVector.map(_.toInt).sorted should be((2 to 100).toVector)
     }

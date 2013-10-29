@@ -35,7 +35,7 @@ trait Startup {
     val system = ActorSystem(systemName, conf)
     val joinAddress = joinAddressOption.getOrElse(Cluster(system).selfAddress)
     Cluster(system).join(joinAddress)
-    system.actorOf(ClusterSingletonManager.props(_ ⇒ Master.props(workTimeout), "active",
+    system.actorOf(ClusterSingletonManager.props(_ => Master.props(workTimeout), "active",
       PoisonPill, Some(role)), "master")
     joinAddress
   }
