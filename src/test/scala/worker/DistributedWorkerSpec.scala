@@ -1,8 +1,7 @@
 package worker
 
 import scala.concurrent.duration._
-import org.scalatest.{ BeforeAndAfterAll, FlatSpec }
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.{ BeforeAndAfterAll, FlatSpecLike, Matchers }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import akka.contrib.pattern.DistributedPubSubExtension
@@ -43,8 +42,8 @@ object DistributedWorkerSpec {
 
 class DistributedWorkerSpec(_system: ActorSystem)
   extends TestKit(_system)
-  with ShouldMatchers
-  with FlatSpec
+  with Matchers
+  with FlatSpecLike
   with BeforeAndAfterAll
   with ImplicitSender {
 
@@ -59,7 +58,7 @@ class DistributedWorkerSpec(_system: ActorSystem)
   "Distributed workers" should "perform work and publish results" in {
     val clusterAddress = Cluster(system).selfAddress
     Cluster(system).join(clusterAddress)
-    system.actorOf(ClusterSingletonManager.props(_ => Master.props(workTimeout), "active",
+    system.actorOf(ClusterSingletonManager.props(Master.props(workTimeout), "active",
       PoisonPill, None), "master")
 
     val initialContacts = Set(
