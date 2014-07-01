@@ -60,7 +60,7 @@ class Worker(clusterClient: ActorRef, workExecutorProps: Props, registerInterval
       sendToMaster(WorkerRequestsWork(workerId))
 
     case Work(workId, job) =>
-      log.debug("Got work: {}", job)
+      log.info("Got work: {}", job)
       currentWorkId = Some(workId)
       workExecutor ! job
       context.become(working)
@@ -68,7 +68,7 @@ class Worker(clusterClient: ActorRef, workExecutorProps: Props, registerInterval
 
   def working: Receive = {
     case WorkComplete(result) =>
-      log.debug("Work is complete. Result {}.", result)
+      log.info("Work is complete. Result {}.", result)
       sendToMaster(WorkIsDone(workerId, workId, result))
       context.setReceiveTimeout(5.seconds)
       context.become(waitForWorkIsDoneAck(result))

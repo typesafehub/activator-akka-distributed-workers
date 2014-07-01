@@ -18,7 +18,7 @@
 		The solution should support:
 		</p>
 		<ul>
-		<li>elastic addition/removal of front end nodes that receives work from clients</li>
+		<li>elastic addition/removal of frontend nodes that receives work from clients</li>
 		<li>elastic addition/removal of worker actors and worker nodes</li>
         <li>thousands of workers</li>
 		<li>jobs should not be lost, and if a worker fails, the job should be retried</li>
@@ -65,18 +65,20 @@
 		</p>
 
 		<p>
-		The master actor is made available for both front end and workers by registering itself
-		in the <a href="http://doc.akka.io/docs/akka/2.3.0/contrib/distributed-pub-sub.html"
-		target="_blank">DistributedPubSubMediator</a>.
+		The master actor is made available for workers by registering itself
+		in the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
+		target="_blank">ClusterReceptionist</a>.
 		</p>
-
-		<p><img src="tutorial/img3.png" border="0" /></p>
-
-		<p><img src="tutorial/img4.png" border="0" /></p>
+		
+		<p>
+		The frontend actor talks to the master actor via the
+		in the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/distributed-pub-sub.html"
+		target="_blank">ClusterSingletonProxy</a>.
+		</p>
 
 		<p>
 		Later we will explore the implementation of the <a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a>
-		actor in depth, but first we will take a look at the front end and worker that interacts with the master.
+		actor in depth, but first we will take a look at the frontend and worker that interacts with the master.
 		</p>
 
 	</div>
@@ -84,19 +86,19 @@
 		<h2>Explore the Code - Front End</h2>
 
 		<p>
-		A typical front end provides a RESTful API that is used by the clients to submit (POST) jobs.
+		A typical frontend provides a RESTful API that is used by the clients to submit (POST) jobs.
 		When the service has accepted the job it returns Created/201 response code to the client.
 		If it can't accept the job it returns a failure response code and the client has to retry or
 		discard the job.
 		</p>
 
 		<p>
-		In this example the front end is emulated, for simplicity, by an ordinary actor, see
+		In this example the frontend is emulated, for simplicity, by an ordinary actor, see
 		<a href="#code/src/main/scala/worker/Frontend.scala" class="shortcut">Frontend.scala</a>
 		and client requests are simulated by the
 		<a href="#code/src/main/scala/worker/WorkProducer.scala" class="shortcut">WorkProducer.scala</a>.
 		As you can see the <code>Frontend</code> actor sends the work to the active master via the
-		<code>DistributedPubSubMediator</code>. It doesn't care about the exact location of the
+		<code>ClusterSingletonProxy</code>. It doesn't care about the exact location of the
 		master. Somewhere in the cluster there should be one master actor running.
 		The message is sent with <code>ask/?</code> to be able to reply to the client (<code>WorkProducer</code>)
 		when the job has been accepted or denied by the master.
@@ -105,7 +107,7 @@
 		<p><img src="tutorial/img5.png" border="0" /></p>
 
 		<p>
-		You can see how a Fronteend and WorkProducer actor is started in the method <code>startFrontend</code>
+		You can see how a Frontend and WorkProducer actor is started in the method <code>startFrontend</code>
 		in <a href="#code/src/main/scala/worker/Main.scala" class="shortcut">Main.scala</a>
 		</p>
 
@@ -117,7 +119,7 @@
 		<p>
 		We should support many worker nodes and we assume that they can be unstable. Therefore we
 		don't let the worker nodes be members of the cluster, instead they communicate with the cluster
-		through the <a href="http://doc.akka.io/docs/akka/2.3.0/contrib/cluster-client.html"
+		through the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
 		target="_blank">Cluster Client</a>. The worker doesn't have to know exactly where the master
 		is located.
 		</p>
@@ -176,19 +178,21 @@
 		</p>
 
 		<p>
-		When the master receives <code>Work</code> from front end it adds the work item to
+		When the master receives <code>Work</code> from frontend it adds the work item to
 		the queue of pending work and notifies idle workers with <code>WorkIsReady</code> message.
 		</p>
 
 		<p>
 		To be able to restore same state in case of fail over to a standby master actor the
 		changes (domain events) are stored in an append only transaction log and can be replayed
-		when standby actor is started. This event sourcing is not implemented in the example yet.
-		The <a href="https://github.com/eligosource/eventsourced" target="_blank">Eventsourced</a> library
-		can be used for that. When the domain event has been saved successfully the master replies
-		with an acknowledgement message (<code>Ack</code>) to the front end.
+		when standby actor is started.
+		<a href="http://doc.akka.io/docs/akka/2.3.4/scala/persistence.html" target="_blank">Akka Persistence</a>
+		is used for that. <a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a> extends
+		<code>PersistentActor</code> and events are stored in with the calls to the <code>persist</code>
+		method. When the domain event has been saved successfully the master replies
+		with an acknowledgement message (<code>Ack</code>) to the frontend.
 		The master also keeps track of accepted work identifiers to be able to discard duplicates
-		sent from the front end.
+		sent from the frontend.
 		</p>
 
 		<p><img src="tutorial/img8.png" border="0" /></p>
@@ -217,20 +221,22 @@
 
 		<p>
 		The <a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a> actor
-		is a <a href="http://doc.akka.io/docs/akka/2.3.0/contrib/cluster-singleton.html#cluster-singleton"
-		target="_blank">Cluster Singleton</a> and register itself in 
-		<a href="http://doc.akka.io/docs/akka/2.3.0/contrib/distributed-pub-sub.html"
-		target="_blank">DistributedPubSubMediator</a>.
+		is a <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-singleton.html#cluster-singleton"
+		target="_blank">Cluster Singleton</a> and register itself in the 
+		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html" target="_blank">Cluster Receptionist</a>.
+		The <code>Master</code> is using 
+		<a href="http://doc.akka.io/docs/akka/2.3.4/scala/persistence.html" target="_blank">Akka Persistence</a>
+		to store incoming jobs and state.
 		<p>
 
 		<p>
 		The <a href="#code/src/main/scala/worker/Frontend.scala" class="shortcut">Frontend</a> actor send work
-		to the master via the mediator.
+		to the master via the <code>ClusterSingletonProxy</code>.
 		</p>
 
 		<p>
 		The <a href="#code/src/main/scala/worker/Worker.scala" class="shortcut">Worker</a> communicate with the
-		cluster and its master with the <a href="http://doc.akka.io/docs/akka/2.3.0/contrib/cluster-client.html"
+		cluster and its master with the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
 		target="_blank">Cluster Client</a>.
 		</p>
 
@@ -246,7 +252,116 @@
 			from nodes joining the cluster, the simulated work and results.
 		</p>
 
-		<p>
+<p>
+The <a href="#code/src/main/scala/worker/Main.scala" class="shortcut">worker.Main</a>
+starts three actor systems in the same JVM process. It can be more
+interesting to run them in separate processes. <b>Stop</b> the application in the
+<a href="#run" class="shortcut">Run</a> tab and then open three terminal windows.
+</p>
+
+<p>
+In the first terminal window, start the first seed node with the following command:
+</p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator "runMain worker.Main 2551"
+</code></pre>
+
+<p>
+2551 corresponds to the port of the first seed-nodes element in the configuration. In the log
+output you see that the cluster node has been started and changed status to 'Up'.
+</p>
+
+<p>
+In the second terminal window, start the frontend node with the following command:
+</p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator "runMain worker.Main 3001"		
+</code></pre>
+
+<p>
+3001 is to the port of the node. In the log output you see that the cluster node has been started
+and joins the 2551 node and becomes a member of the cluster. Its status changed to 'Up'.
+</p>
+
+<p>
+Switch over to the first terminal window and see in the log output that the member joined.
+So far, no <code>Worker</code> has not been started, i.e. jobs are produced and accepted but
+not processed.
+</p>
+
+<p>
+In the third terminal window, start a worker node with the following command:
+</p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator "runMain worker.Main 0"
+</code></pre>
+
+<p>
+Now you don't need to specify the port number, 0 means that it will use a random available port.
+This worker node is not part of the cluster, but it connects to one of the configured cluster
+nodes via the <code>ClusterClient</code>. Look at the log output in the different terminal
+windows. In the second window (frontend) you should see that the produced jobs are processed
+and logged as <code>"Consumed result"</code>.
+</p>
+
+<p>
+Take a look at the logging that is done in 
+<a href="#code/src/main/scala/worker/WorkProducer.scala" class="shortcut">WorkProducer.scala</a>,
+<a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a>
+and <a href="#code/src/main/scala/worker/Worker.scala" class="shortcut">Worker.scala</a>.
+Identify the corresponding log entries in the 3 terminal windows.
+</p>
+
+<p>
+Shutdown the worker node (third terminal window) with <code>ctrl-c</code>.
+Observe how the <code>"Consumed result"</code> logs in the frontend node (second terminal window)
+stops. Start the worker node again.
+</p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator "runMain worker.Main 0"
+</code></pre>
+
+<p>
+You can also start more such worker nodes in new terminal windows.
+</p>
+
+<p>
+You can start more cluster backend nodes using port numbers between 2000-2999:
+</p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator "runMain worker.Main 2552"
+</code></pre>
+
+<p>
+You can start more cluster frontend nodes using port numbers between 3000-3999:
+</p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator "runMain worker.Main 3002"		
+</code></pre>
+
+<p>
+Note that this sample runs the 
+<a href="http://doc.akka.io/docs/akka/2.3.4/scala/persistence.html#Shared_LevelDB_journal" target="_blank">shared LevelDB journal</a>
+on the node with port 2551. This is a single point of failure, and should not be used in production. 
+A real system would use a 
+<a href="http://akka.io/community/" target="_blank">distributed journal</a>.
+</p>
+
+<p>
+The files of the shared journal are saved in the target directory and when you restart
+the application the state is recovered. You can clean the state with:
+</p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator clean
+</code></pre>
+
 
 	</div>
 	<div>
@@ -256,13 +371,8 @@
 		If the singleton master becomes a bottleneck we can start several master actors and
 		shard the jobs among them. For each shard of master/standby nodes we use a separate
 		cluster role name, e.g. "backend-shard1", "backend-shard2".
+		Implementation of this is left as an exercise.
 		</p>
-
-		<p>
-		In <a href="#code/src/main/scala/worker/MainManyMasters.scala" class="shortcut">MainManyMasters.scala</a>
-		you can see startup of multiple masters in action. Everything else remains the same.
-		Note that <code>Frontend</code> sends work to the master with <code>DistributedPubSubMediator.Send</code>,
-		which means that one work item is sent to only one master.
 
 	</div>
 	<div>
@@ -270,19 +380,19 @@
 
 		<p>
 		In this example we have used
-		<a href="http://doc.akka.io/docs/akka/2.3.0/contrib/cluster-singleton.html#cluster-singleton"
+		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-singleton.html#cluster-singleton"
 		target="_blank">Cluster Singleton</a>,
-		<a href="http://doc.akka.io/docs/akka/2.3.0/contrib/cluster-client.html"
+		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
 		target="_blank">Cluster Client</a> and
-		<a href="http://doc.akka.io/docs/akka/2.3.0/contrib/distributed-pub-sub.html"
+		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/distributed-pub-sub.html"
 		target="_blank">Distributed Publish Subscribe</a>.
 		</p>
 
 		<p>
 		More in depth documentation can be found in the
-		<a href="http://doc.akka.io/docs/akka/2.3.0/common/cluster.html"
+		<a href="http://doc.akka.io/docs/akka/2.3.4/common/cluster.html"
 		target="_blank">Cluster Specification</a> and in the
-		<a href="http://doc.akka.io/docs/akka/2.3.0/scala/cluster-usage.html"
+		<a href="http://doc.akka.io/docs/akka/2.3.4/scala/cluster-usage.html"
 		target="_blank">Cluster Usage</a> documentation.
 		</p>
 

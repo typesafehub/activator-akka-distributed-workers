@@ -17,8 +17,29 @@ import akka.actor.ActorRef
 import akka.actor.Actor
 import akka.testkit.ImplicitSender
 import akka.testkit.TestProbe
+import com.typesafe.config.ConfigFactory
+import java.io.File
+import org.apache.commons.io.FileUtils
 
 object DistributedWorkerSpec {
+
+  val clusterConfig = ConfigFactory.parseString("""
+    akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
+    akka.remote.netty.tcp.port=0
+    akka.persistence {
+      journal.leveldb {
+        native = off
+        dir = "target/test-journal"
+      }
+      snapshot-store.local.dir = "target/test-snapshots"
+    }
+    """)
+
+  val workerConfig = ConfigFactory.parseString("""
+    akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+    akka.remote.netty.tcp.port=0
+    """)
+
   class FlakyWorkExecutor extends Actor {
     var i = 0
 
@@ -35,7 +56,7 @@ object DistributedWorkerSpec {
 
         val n2 = n * n
         val result = s"$n * $n = $n2"
-        sender ! Worker.WorkComplete(result)
+        sender() ! Worker.WorkComplete(result)
     }
   }
 }
@@ -51,23 +72,48 @@ class DistributedWorkerSpec(_system: ActorSystem)
 
   val workTimeout = 3.seconds
 
-  def this() = this(ActorSystem("DistributedWorkerSpec"))
+  def this() = this(ActorSystem("DistributedWorkerSpec", DistributedWorkerSpec.clusterConfig))
 
-  override def afterAll: Unit = system.shutdown()
+  val backendSystem: ActorSystem = {
+    val config = ConfigFactory.parseString("akka.cluster.roles=[backend]").withFallback(clusterConfig)
+    ActorSystem("DistributedWorkerSpec", config)
+  }
+
+  val workerSystem: ActorSystem = ActorSystem("DistributedWorkerSpec", workerConfig)
+
+  val storageLocations = List(
+    "akka.persistence.journal.leveldb.dir",
+    "akka.persistence.snapshot-store.local.dir").map(s => new File(system.settings.config.getString(s)))
+
+  override def beforeAll: Unit = {
+    storageLocations.foreach(dir => FileUtils.deleteDirectory(dir))
+  }
+
+  override def afterAll: Unit = {
+    system.shutdown()
+    backendSystem.shutdown()
+    workerSystem.shutdown()
+    system.awaitTermination()
+    backendSystem.awaitTermination()
+    workerSystem.awaitTermination()
+
+    storageLocations.foreach(dir => FileUtils.deleteDirectory(dir))
+  }
 
   "Distributed workers" should "perform work and publish results" in {
-    val clusterAddress = Cluster(system).selfAddress
-    Cluster(system).join(clusterAddress)
-    system.actorOf(ClusterSingletonManager.props(Master.props(workTimeout), "active",
-      PoisonPill, None), "master")
+    val clusterAddress = Cluster(backendSystem).selfAddress
+    Cluster(backendSystem).join(clusterAddress)
+    backendSystem.actorOf(ClusterSingletonManager.props(Master.props(workTimeout), "active",
+      PoisonPill, Some("backend")), "master")
 
     val initialContacts = Set(
-      system.actorSelection(RootActorPath(clusterAddress) / "user" / "receptionist"))
-    val clusterClient = system.actorOf(ClusterClient.props(initialContacts), "clusterClient")
+      workerSystem.actorSelection(RootActorPath(clusterAddress) / "user" / "receptionist"))
+    val clusterClient = workerSystem.actorOf(ClusterClient.props(initialContacts), "clusterClient")
     for (n <- 1 to 3)
-      system.actorOf(Worker.props(clusterClient, Props[WorkExecutor], 1.second), "worker-" + n)
-    val flakyWorker = system.actorOf(Worker.props(clusterClient, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
+      workerSystem.actorOf(Worker.props(clusterClient, Props[WorkExecutor], 1.second), "worker-" + n)
+    val flakyWorker = workerSystem.actorOf(Worker.props(clusterClient, Props[FlakyWorkExecutor], 1.second), "flaky-worker")
 
+    Cluster(system).join(clusterAddress)
     val frontend = system.actorOf(Props[Frontend], "frontend")
 
     val results = TestProbe()
