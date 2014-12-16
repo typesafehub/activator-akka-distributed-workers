@@ -12,7 +12,7 @@
 		distributed workers with Akka cluster features.
 		</p>
 
-		<p><img src="tutorial/img1.png" border="0" /></p>
+		<p><img src="img1.png" border="0" /></p>
 
 		<p>
 		The solution should support:
@@ -52,7 +52,7 @@
 		in <a href="#code/src/main/scala/worker/Main.scala" class="shortcut">Main.scala</a>
 		</p>
 
-		<p><img src="tutorial/img2.png" border="0" /></p>
+		<p><img src="img2.png" border="0" /></p>
 
 		<p>
 		In case of failure of the master node another master actor is automatically started on
@@ -104,7 +104,7 @@
 		when the job has been accepted or denied by the master.
 		</p>
 
-		<p><img src="tutorial/img5.png" border="0" /></p>
+		<p><img src="img5.png" border="0" /></p>
 
 		<p>
 		You can see how a Frontend and WorkProducer actor is started in the method <code>startFrontend</code>
@@ -124,7 +124,7 @@
 		is located.
 		</p>
 
-		<p><img src="tutorial/img6.png" border="0" /></p>
+		<p><img src="img6.png" border="0" /></p>
 
 		<p>
 		You can see how a worker is started in the method <code>startWorker</code>
@@ -141,13 +141,13 @@
 		in case of master fail over the worker re-register itself to the new master.
 		</p>
 
-		<p><img src="tutorial/img7.png" border="0" /></p>
+		<p><img src="img7.png" border="0" /></p>
 
 		<p>
 		The Frontend actor sends the work to the master actor.
 		</p>
 
-		<p><img src="tutorial/img8.png" border="0" /></p>
+		<p><img src="img8.png" border="0" /></p>
 
 		<p>
 		When the worker receives work from the master it delegates the actual processing to
@@ -155,7 +155,7 @@
 		to keep the worker responsive while executing the work.
 		</p>
 
-		<p><img src="tutorial/img9.png" border="0" /></p>
+		<p><img src="img9.png" border="0" /></p>
 
 	</div>
 	<div>
@@ -195,7 +195,7 @@
 		sent from the frontend.
 		</p>
 
-		<p><img src="tutorial/img8.png" border="0" /></p>
+		<p><img src="img8.png" border="0" /></p>
 
 		<p>
 		When a worker receives <code>WorkIsReady</code> it sends back <code>WorkerRequestsWork</code>
@@ -204,7 +204,7 @@
 		could send progress messages, but that is not implemented in the example.
 		</p>
 
-		<p><img src="tutorial/img9.png" border="0" /></p>
+		<p><img src="img9.png" border="0" /></p>
 
 		<p>
 		When the worker sends <code>WorkIsDone</code> the master updates its state of the worker
@@ -212,7 +212,7 @@
 		re-send if it doesn't receive the acknowledgement.
 		</p>
 
-		<p><img src="tutorial/img10.png" border="0" /></p>
+		<p><img src="img10.png" border="0" /></p>
 
 	</div>
 	</div>
@@ -240,7 +240,7 @@
 		target="_blank">Cluster Client</a>.
 		</p>
 
-		<p><img src="tutorial/img11.png" border="0" /></p>
+		<p><img src="img11.png" border="0" /></p>
 
 	</div>	
 	<div>
