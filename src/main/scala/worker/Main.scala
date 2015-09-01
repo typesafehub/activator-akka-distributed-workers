@@ -3,22 +3,20 @@ package worker
 import scala.concurrent.duration._
 import com.typesafe.config.ConfigFactory
 import akka.actor.ActorSystem
-import akka.actor.Address
 import akka.actor.PoisonPill
 import akka.actor.Props
 import akka.actor.RootActorPath
-import akka.cluster.Cluster
-import akka.contrib.pattern.ClusterClient
-import akka.contrib.pattern.ClusterSingletonManager
+import akka.cluster.client.{ClusterClientReceptionist, ClusterClientSettings, ClusterClient}
+import akka.cluster.singleton.{ClusterSingletonManagerSettings, ClusterSingletonManager}
 import akka.japi.Util.immutableSeq
 import akka.actor.AddressFromURIString
 import akka.actor.ActorPath
 import akka.persistence.journal.leveldb.SharedLeveldbStore
+import akka.persistence.journal.leveldb.SharedLeveldbJournal
 import akka.util.Timeout
 import akka.pattern.ask
 import akka.actor.Identify
 import akka.actor.ActorIdentity
-import akka.persistence.journal.leveldb.SharedLeveldbJournal
 
 object Main {
 
@@ -53,8 +51,16 @@ object Main {
     startupSharedJournal(system, startStore = (port == 2551), path =
       ActorPath.fromString("akka.tcp://ClusterSystem@127.0.0.1:2551/user/store"))
 
-    system.actorOf(ClusterSingletonManager.props(Master.props(workTimeout), "active",
-      PoisonPill, Some(role)), "master")
+    system.actorOf(
+      ClusterSingletonManager.props(
+        Master.props(workTimeout),
+        PoisonPill,
+        ClusterSingletonManagerSettings(system)
+          .withRole(role)
+          .withSingletonName("active")
+      ),
+      "master")
+
   }
 
   def startFrontend(port: Int): Unit = {
@@ -72,10 +78,15 @@ object Main {
       withFallback(ConfigFactory.load("worker"))
     val system = ActorSystem("WorkerSystem", conf)
     val initialContacts = immutableSeq(conf.getStringList("contact-points")).map {
-      case AddressFromURIString(addr) ⇒ system.actorSelection(RootActorPath(addr) / "user" / "receptionist")
+      case AddressFromURIString(addr) ⇒ RootActorPath(addr) / "system" / "receptionist"
     }.toSet
 
-    val clusterClient = system.actorOf(ClusterClient.props(initialContacts), "clusterClient")
+    val clusterClient = system.actorOf(
+      ClusterClient.props(
+        ClusterClientSettings(system)
+          .withInitialContacts(initialContacts)),
+      "clusterClient")
+
     system.actorOf(Worker.props(clusterClient, Props[WorkExecutor]), "worker")
   }
 
@@ -92,12 +103,12 @@ object Main {
       case ActorIdentity(_, Some(ref)) => SharedLeveldbJournal.setStore(ref, system)
       case _ =>
         system.log.error("Shared journal not started at {}", path)
-        system.shutdown()
+        system.terminate()
     }
     f.onFailure {
       case _ =>
         system.log.error("Lookup of shared journal at {} timed out", path)
-        system.shutdown()
+        system.terminate()
     }
   }
 }

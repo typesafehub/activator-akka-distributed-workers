@@ -8,7 +8,7 @@ import akka.actor.ActorRef
 import akka.actor.Props
 import akka.actor.ReceiveTimeout
 import akka.actor.Terminated
-import akka.contrib.pattern.ClusterClient.SendToAll
+import akka.cluster.client.ClusterClient.SendToAll
 import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy.Stop
 import akka.actor.SupervisorStrategy.Restart
