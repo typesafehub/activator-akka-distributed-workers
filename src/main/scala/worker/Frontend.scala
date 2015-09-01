@@ -4,7 +4,7 @@ import scala.concurrent.duration._
 import akka.actor.Actor
 import akka.pattern._
 import akka.util.Timeout
-import akka.contrib.pattern.ClusterSingletonProxy
+import akka.cluster.singleton.{ClusterSingletonProxySettings, ClusterSingletonProxy}
 
 object Frontend {
   case object Ok
@@ -14,9 +14,11 @@ object Frontend {
 class Frontend extends Actor {
   import Frontend._
   import context.dispatcher
-  val masterProxy = context.actorOf(ClusterSingletonProxy.props(
-    singletonPath = "/user/master/active",
-    role = Some("backend")),
+  val masterProxy = context.actorOf(
+    ClusterSingletonProxy.props(
+      settings = ClusterSingletonProxySettings(context.system).withRole("backend"),
+      singletonManagerPath = "/user/master"
+    ),
     name = "masterProxy")
 
   def receive = {

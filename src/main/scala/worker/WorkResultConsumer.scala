@@ -1,14 +1,13 @@
 package worker
 
-import scala.concurrent.duration._
 import akka.actor.Actor
 import akka.actor.ActorLogging
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator
+import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.DistributedPubSubMediator
 
 class WorkResultConsumer extends Actor with ActorLogging {
 
-  val mediator = DistributedPubSubExtension(context.system).mediator
+  val mediator = DistributedPubSub(context.system).mediator
   mediator ! DistributedPubSubMediator.Subscribe(Master.ResultsTopic, self)
 
   def receive = {

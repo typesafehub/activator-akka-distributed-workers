@@ -1,16 +1,13 @@
 package worker
 
-import scala.collection.immutable.Queue
-import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorRef
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator
-import akka.contrib.pattern.DistributedPubSubMediator.Put
+import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.DistributedPubSubMediator
 import scala.concurrent.duration.Deadline
 import scala.concurrent.duration.FiniteDuration
 import akka.actor.Props
-import akka.contrib.pattern.ClusterReceptionistExtension
+import akka.cluster.client.ClusterClientReceptionist
 import akka.cluster.Cluster
 import akka.persistence.PersistentActor
 
@@ -36,8 +33,8 @@ class Master(workTimeout: FiniteDuration) extends PersistentActor with ActorLogg
   import Master._
   import WorkState._
 
-  val mediator = DistributedPubSubExtension(context.system).mediator
-  ClusterReceptionistExtension(context.system).registerService(self)
+  val mediator = DistributedPubSub(context.system).mediator
+  ClusterClientReceptionist(context.system).registerService(self)
 
   // persistenceId must include cluster role to support multiple masters
   override def persistenceId: String = Cluster(context.system).selfRoles.find(_.startsWith("backend-")) match {

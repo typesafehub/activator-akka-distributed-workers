@@ -66,13 +66,13 @@
 
 		<p>
 		The master actor is made available for workers by registering itself
-		in the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
+		in the <a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-client.html"
 		target="_blank">ClusterReceptionist</a>.
 		</p>
 		
 		<p>
 		The frontend actor talks to the master actor via the
-		in the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/distributed-pub-sub.html"
+		in the <a href="http://doc.akka.io/docs/akka/2.4.0/scala/distributed-pub-sub.html"
 		target="_blank">ClusterSingletonProxy</a>.
 		</p>
 
@@ -119,7 +119,7 @@
 		<p>
 		We should support many worker nodes and we assume that they can be unstable. Therefore we
 		don't let the worker nodes be members of the cluster, instead they communicate with the cluster
-		through the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
+		through the <a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-client.html"
 		target="_blank">Cluster Client</a>. The worker doesn't have to know exactly where the master
 		is located.
 		</p>
@@ -186,7 +186,7 @@
 		To be able to restore same state in case of fail over to a standby master actor the
 		changes (domain events) are stored in an append only transaction log and can be replayed
 		when standby actor is started.
-		<a href="http://doc.akka.io/docs/akka/2.3.4/scala/persistence.html" target="_blank">Akka Persistence</a>
+		<a href="http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html" target="_blank">Akka Persistence</a>
 		is used for that. <a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a> extends
 		<code>PersistentActor</code> and events are stored in with the calls to the <code>persist</code>
 		method. When the domain event has been saved successfully the master replies
@@ -221,11 +221,11 @@
 
 		<p>
 		The <a href="#code/src/main/scala/worker/Master.scala" class="shortcut">Master</a> actor
-		is a <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-singleton.html#cluster-singleton"
+		is a <a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-singleton.html"
 		target="_blank">Cluster Singleton</a> and register itself in the 
-		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html" target="_blank">Cluster Receptionist</a>.
+		<a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-client.html" target="_blank">Cluster Receptionist</a>.
 		The <code>Master</code> is using 
-		<a href="http://doc.akka.io/docs/akka/2.3.4/scala/persistence.html" target="_blank">Akka Persistence</a>
+		<a href="http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html" target="_blank">Akka Persistence</a>
 		to store incoming jobs and state.
 		<p>
 
@@ -236,7 +236,7 @@
 
 		<p>
 		The <a href="#code/src/main/scala/worker/Worker.scala" class="shortcut">Worker</a> communicate with the
-		cluster and its master with the <a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
+		cluster and its master with the <a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-client.html"
 		target="_blank">Cluster Client</a>.
 		</p>
 
@@ -347,7 +347,7 @@ You can start more cluster frontend nodes using port numbers between 3000-3999:
 
 <p>
 Note that this sample runs the 
-<a href="http://doc.akka.io/docs/akka/2.3.4/scala/persistence.html#Shared_LevelDB_journal" target="_blank">shared LevelDB journal</a>
+<a href="http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html#Shared_LevelDB_journal" target="_blank">shared LevelDB journal</a>
 on the node with port 2551. This is a single point of failure, and should not be used in production. 
 A real system would use a 
 <a href="http://akka.io/community/" target="_blank">distributed journal</a>.
@@ -380,19 +380,19 @@ the application the state is recovered. You can clean the state with:
 
 		<p>
 		In this example we have used
-		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-singleton.html#cluster-singleton"
+		<a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-singleton.html"
 		target="_blank">Cluster Singleton</a>,
-		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/cluster-client.html"
+		<a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-client.html"
 		target="_blank">Cluster Client</a> and
-		<a href="http://doc.akka.io/docs/akka/2.3.4/contrib/distributed-pub-sub.html"
+		<a href="http://doc.akka.io/docs/akka/2.4.0/scala/distributed-pub-sub.html"
 		target="_blank">Distributed Publish Subscribe</a>.
 		</p>
 
 		<p>
 		More in depth documentation can be found in the
-		<a href="http://doc.akka.io/docs/akka/2.3.4/common/cluster.html"
+		<a href="http://doc.akka.io/docs/akka/2.4.0/common/cluster.html"
 		target="_blank">Cluster Specification</a> and in the
-		<a href="http://doc.akka.io/docs/akka/2.3.4/scala/cluster-usage.html"
+		<a href="http://doc.akka.io/docs/akka/2.4.0/scala/cluster-usage.html"
 		target="_blank">Cluster Usage</a> documentation.
 		</p>
 
