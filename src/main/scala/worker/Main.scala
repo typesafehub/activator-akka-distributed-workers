@@ -55,9 +55,7 @@ object Main {
       ClusterSingletonManager.props(
         Master.props(workTimeout),
         PoisonPill,
-        ClusterSingletonManagerSettings(system)
-          .withRole(role)
-          .withSingletonName("active")
+        ClusterSingletonManagerSettings(system).withRole(role)
       ),
       "master")
 

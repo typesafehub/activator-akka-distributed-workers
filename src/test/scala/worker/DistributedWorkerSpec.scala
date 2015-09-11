@@ -117,9 +117,7 @@ class DistributedWorkerSpec(_system: ActorSystem)
       ClusterSingletonManager.props(
         Master.props(workTimeout),
         PoisonPill,
-        ClusterSingletonManagerSettings(system)
-          .withRole("backend")
-          .withSingletonName("active")),
+        ClusterSingletonManagerSettings(system).withRole("backend")),
       "master")
 
 

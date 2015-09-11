@@ -32,7 +32,7 @@ class Worker(clusterClient: ActorRef, workExecutorProps: Props, registerInterval
 
   import context.dispatcher
   val registerTask = context.system.scheduler.schedule(0.seconds, registerInterval, clusterClient,
-    SendToAll("/user/master/active", RegisterWorker(workerId)))
+    SendToAll("/user/master/singleton", RegisterWorker(workerId)))
 
   val workExecutor = context.watch(context.actorOf(workExecutorProps, "exec"))
 
@@ -94,7 +94,7 @@ class Worker(clusterClient: ActorRef, workExecutorProps: Props, registerInterval
   }
 
   def sendToMaster(msg: Any): Unit = {
-    clusterClient ! SendToAll("/user/master/active", msg)
+    clusterClient ! SendToAll("/user/master/singleton", msg)
   }
 
 }
